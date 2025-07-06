@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>剑与魔法的世界 - AI驱动的RPG游戏</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-container">
+        <!-- 游戏设置面板 -->
+        <div id="settings-panel" class="settings-panel hidden">
+            <div class="settings-content">
+                <h2>游戏设置</h2>
+                <div class="settings-form">
+                    <label for="gemini-api-key">Gemini API Key:</label>
+                    <input type="password" id="gemini-api-key" placeholder="请输入您的Gemini API密钥">
+                    <button id="test-api">测试API连接</button>
+                    <button id="save-settings">保存设置</button>
+                    <button id="close-settings">关闭</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 游戏主界面 -->
+        <div class="game-main">
+            <!-- 标题栏 -->
+            <header class="game-header">
+                <h1>剑与魔法的世界</h1>
+                <div class="header-controls">
+                    <button id="settings-btn" class="control-btn">设置</button>
+                    <button id="reset-game-btn" class="control-btn">重置游戏</button>
+                </div>
+            </header>
+
+            <!-- 角色创建界面 -->
+            <div id="character-creation" class="character-creation hidden">
+                <h2>角色创建</h2>
+                <div class="creation-form">
+                    <div class="form-group">
+                        <label for="char-name">角色姓名:</label>
+                        <input type="text" id="char-name" placeholder="请输入角色姓名">
+                    </div>
+                    <div class="form-group">
+                        <label for="char-description">角色描述:</label>
+                        <textarea id="char-description" placeholder="请描述您的角色(包括性别、年龄、外貌、性格、职业等，也可以只设定部分信息)"></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button id="random-character-btn" class="secondary-btn">AI随机生成角色</button>
+                        <button id="create-character-btn">创建角色</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 游戏界面 -->
+            <div id="game-interface" class="game-interface hidden">
+                <div class="game-content">
+                    <!-- 左侧：叙事和图像 -->
+                    <div class="narrative-section">
+                        <div class="scene-image-container">
+                            <img id="scene-image" src="" alt="场景图像" class="scene-image hidden">
+                            <div id="image-loading" class="image-loading hidden">
+                                <div class="loading-spinner"></div>
+                                <p>正在生成场景图像...</p>
+                            </div>
+                        </div>
+                        <div class="narrative-log" id="narrative-log">
+                            <div class="welcome-message">
+                                <p>欢迎来到剑与魔法的世界！</p>
+                                <p>请创建您的角色开始冒险。</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 右侧：控制面板 -->
+                    <div class="control-panel">
+                        <!-- 角色头像区域 -->
+                        <div class="character-portrait">
+                            <h3>角色头像</h3>
+                            <div class="portrait-container">
+                                <img id="character-portrait" src="" alt="角色头像" class="portrait-image hidden">
+                                <div id="portrait-loading" class="portrait-loading hidden">
+                                    <div class="loading-spinner"></div>
+                                    <p>正在生成角色头像...</p>
+                                </div>
+                                <div id="portrait-placeholder" class="portrait-placeholder">
+                                    <p>暂无角色头像</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 快捷命令 -->
+                        <div class="quick-commands">
+                            <h3>快捷命令</h3>
+                            <div class="command-buttons">
+                                <button class="command-btn" data-command="status">查看状态</button>
+                                <button class="command-btn" data-command="chars">查看角色</button>
+                                <button class="command-btn" data-command="env">查看环境</button>
+                            </div>
+                        </div>
+
+                        <!-- 建议动作 -->
+                        <div class="suggested-actions">
+                            <h3>建议动作</h3>
+                            <div id="action-buttons" class="action-buttons">
+                                <!-- 动态生成的建议动作按钮 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 输入区域 -->
+                <div class="input-section">
+                    <div class="input-container">
+                        <input type="text" id="player-input" placeholder="请输入您的行动..." maxlength="500">
+                        <button id="submit-action">发送</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 状态模态框 -->
+        <div id="status-modal" class="modal hidden">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>详细信息</h2>
+                <div id="status-content" class="status-content">
+                    <!-- 动态显示状态信息 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 加载界面 -->
+        <div id="loading-screen" class="loading-screen hidden">
+            <div class="loading-content">
+                <div class="loading-spinner"></div>
+                <p id="loading-text">正在处理您的请求...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript 文件 -->
+    <script src="db.js"></script>
+    <script src="llm.js"></script>
+    <script src="image.js"></script>
+    <script src="app.js"></script>
+</body>
+</html> 
