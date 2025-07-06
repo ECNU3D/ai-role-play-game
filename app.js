@@ -153,6 +153,9 @@ class GameApp {
         this.ui.gameInterface.classList.remove('hidden');
         this.gameState.currentScene = 'game';
         
+        // 清空状态变化显示
+        this.clearStatusChanges();
+        
         // 显示角色头像
         this.showCharacterPortrait();
     }
@@ -221,9 +224,30 @@ class GameApp {
             // 创建角色对象
             const character = gameDB.createDefaultCharacter(name);
             
-            // 从LLM响应中更新角色信息
+            // 从LLM响应中更新角色信息（安全合并，保护数值类型）
             if (llmResponse.gameState && llmResponse.gameState.character) {
-                Object.assign(character, llmResponse.gameState.character);
+                const llmCharacter = llmResponse.gameState.character;
+                
+                // 安全地合并属性，确保数值字段保持正确类型
+                const numericFields = ['hp', 'maxHp', 'mp', 'maxMp', 'stamina', 'maxStamina', 
+                                     'attack', 'defense', 'magicAttack', 'magicDefense', 
+                                     'luck', 'dexterity', 'intelligence', 'wisdom', 'charisma', 
+                                     'constitution', 'strength', 'money', 'level', 'experience',
+                                     'hunger', 'thirst', 'fatigue', 'morale', 'age'];
+                
+                for (const [key, value] of Object.entries(llmCharacter)) {
+                    if (numericFields.includes(key)) {
+                        // 确保数值字段是数字类型
+                        const numValue = parseFloat(value);
+                        if (!isNaN(numValue)) {
+                            character[key] = numValue;
+                        }
+                        // 如果不是有效数字，保持原有默认值
+                    } else {
+                        // 非数值字段正常赋值
+                        character[key] = value;
+                    }
+                }
             }
 
             // 保存角色到数据库
@@ -294,6 +318,12 @@ class GameApp {
     async processGameAction(input) {
         if (!this.gameState.playerCharacter) {
             this.showError('请先创建角色');
+            return;
+        }
+
+        // 处理特殊的建议动作
+        if (input === '刷新环境') {
+            await this.showEnvironmentInfo(true);
             return;
         }
 
@@ -369,6 +399,10 @@ class GameApp {
                 // 环境信息需要LLM处理
                 await this.showEnvironmentInfo();
                 break;
+            case 'refresh-env':
+                // 强制刷新环境信息
+                await this.showEnvironmentInfo(true);
+                break;
             default:
                 this.showError('未知命令: ' + command);
         }
@@ -380,86 +414,89 @@ class GameApp {
         
         const statusHTML = `
             <div class="character-status">
-                <h2>${character.name} 的状态</h2>
-                
+                <h2>📊 ${character.name} 的状态</h2>
                 <div class="status-section">
-                    <h3>基础属性</h3>
+                    <h3>🏆 基础属性</h3>
                     <div class="stats-grid">
                         <div class="stat-item">
                             <span class="stat-label">等级:</span>
-                            <span class="stat-value">${character.level}</span>
+                            <span class="stat-value">${character.level || 1}</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">经验值:</span>
-                            <span class="stat-value">${character.experience}</span>
+                            <span class="stat-value" style="color: ${(() => {
+                                const exp = character.experience || 0;
+                                const level = character.level || 1;
+                                const nextLevelExp = level ** 2 * 100 + level * 50;
+                                const progress = exp / nextLevelExp;
+                                return progress >= 0.8 ? '#6bcf7f' : progress >= 0.5 ? '#ffd93d' : '#4ecdc4';
+                            })()}">${character.experience || 0} / ${((character.level || 1) ** 2 * 100 + (character.level || 1) * 50)}</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">生命值:</span>
-                            <span class="stat-value">${character.hp}/${character.maxHp}</span>
+                            <span class="stat-value" style="color: ${character.hp <= (character.maxHp * 0.3) ? '#ff6b6b' : character.hp <= (character.maxHp * 0.7) ? '#ffd93d' : '#6bcf7f'}">${character.hp || 0}/${character.maxHp || 100}</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">魔法值:</span>
-                            <span class="stat-value">${character.mp}/${character.maxMp}</span>
+                            <span class="stat-value" style="color: #4ecdc4">${character.mp || 0}/${character.maxMp || 50}</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">体力:</span>
-                            <span class="stat-value">${character.stamina}/${character.maxStamina}</span>
+                            <span class="stat-value" style="color: #45b7d1">${character.stamina || 0}/${character.maxStamina || 100}</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">金钱:</span>
-                            <span class="stat-value">${character.money}</span>
+                            <span class="stat-value" style="color: #f39c12">${character.money || 0} 金币</span>
                         </div>
                     </div>
                 </div>
-
                 <div class="status-section">
-                    <h3>战斗属性</h3>
+                    <h3>⚔️ 战斗属性</h3>
                     <div class="stats-grid">
                         <div class="stat-item">
                             <span class="stat-label">攻击力:</span>
-                            <span class="stat-value">${character.attack}</span>
+                            <span class="stat-value">${character.attack || 10}</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">防御力:</span>
-                            <span class="stat-value">${character.defense}</span>
+                            <span class="stat-value">${character.defense || 5}</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">魔法攻击:</span>
-                            <span class="stat-value">${character.magicAttack}</span>
+                            <span class="stat-value">${character.magicAttack || 5}</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">魔法防御:</span>
-                            <span class="stat-value">${character.magicDefense}</span>
+                            <span class="stat-value">${character.magicDefense || 5}</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">敏捷:</span>
-                            <span class="stat-value">${character.dexterity}</span>
+                            <span class="stat-value">${character.dexterity || 10}</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">幸运:</span>
-                            <span class="stat-value">${character.luck}</span>
+                            <span class="stat-value">${character.luck || 10}</span>
                         </div>
                     </div>
                 </div>
-
                 <div class="status-section">
-                    <h3>生活状态</h3>
+                    <h3>🌟 生活状态</h3>
                     <div class="stats-grid">
                         <div class="stat-item">
                             <span class="stat-label">饥饿度:</span>
-                            <span class="stat-value">${character.hunger}/100</span>
+                            <span class="stat-value" style="color: ${(character.hunger || 50) <= 30 ? '#ff6b6b' : (character.hunger || 50) <= 70 ? '#ffd93d' : '#6bcf7f'}">${character.hunger || 50}/100</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">口渴度:</span>
-                            <span class="stat-value">${character.thirst}/100</span>
+                            <span class="stat-value" style="color: ${(character.thirst || 50) <= 30 ? '#ff6b6b' : (character.thirst || 50) <= 70 ? '#ffd93d' : '#6bcf7f'}">${character.thirst || 50}/100</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">疲劳度:</span>
-                            <span class="stat-value">${character.fatigue}</span>
+                            <span class="stat-value" style="color: ${(character.fatigue || 0) >= 70 ? '#ff6b6b' : (character.fatigue || 0) >= 40 ? '#ffd93d' : '#6bcf7f'}">${character.fatigue || 0}/100</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">士气:</span>
-                            <span class="stat-value">${character.morale}/100</span>
+                            <span class="stat-value" style="color: ${(character.morale || 80) <= 30 ? '#ff6b6b' : (character.morale || 80) <= 70 ? '#ffd93d' : '#6bcf7f'}">${character.morale || 80}/100</span>
                         </div>
                     </div>
                 </div>
@@ -473,26 +510,36 @@ class GameApp {
     showCharacterDetails() {
         const character = this.gameState.playerCharacter;
         
-        // 装备列表
-        const equipmentHTML = Object.entries(character.equipment || {}).map(([slot, item]) => {
-            const slotNames = {
-                weapon: '武器',
-                armor: '护甲',
-                helmet: '头盔',
-                boots: '靴子',
-                gloves: '手套',
-                accessory1: '饰品1',
-                accessory2: '饰品2',
-                shield: '盾牌'
-            };
-            const slotName = slotNames[slot] || slot;
-            const itemName = (item && item.name) ? item.name : '未装备';
-            return `
-                <div class="equipment-item">
-                    <span class="equipment-slot">${slotName}:</span>
-                    <span class="equipment-name">${itemName}</span>
-                </div>
-            `;
+        // 装备列表（显示所有装备槽位）
+        const slotNames = {
+            weapon: '⚔️ 武器',
+            armor: '🛡️ 护甲',
+            helmet: '🪖 头盔',
+            boots: '👢 靴子',
+            gloves: '🧤 手套',
+            accessory1: '💎 饰品1',
+            accessory2: '💍 饰品2',
+            shield: '🛡️ 盾牌'
+        };
+        
+        const equipmentHTML = Object.entries(slotNames).map(([slot, slotName]) => {
+            const item = character.equipment && character.equipment[slot];
+            if (item && item.name) {
+                return `
+                    <div class="equipment-item equipped">
+                        <span class="equipment-slot">${slotName}:</span>
+                        <span class="equipment-name">${item.name}</span>
+                        ${item.description ? `<div class="equipment-description">${item.description}</div>` : ''}
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="equipment-item empty">
+                        <span class="equipment-slot">${slotName}:</span>
+                        <span class="equipment-name empty">未装备</span>
+                    </div>
+                `;
+            }
         }).join('');
 
         // 物品栏
@@ -504,40 +551,57 @@ class GameApp {
                     ${item.description ? `<div class="item-description">${item.description}</div>` : ''}
                 </div>
             `).join('') : 
-            '<p>背包为空</p>';
+            '<div class="empty-inventory">🎒 背包为空</div>';
+
+        // 基本信息
+        const basicInfoItems = [
+            { key: 'gender', label: '性别', icon: '👤' },
+            { key: 'age', label: '年龄', icon: '🎂' },
+            { key: 'race', label: '种族', icon: '🧬' },
+            { key: 'profession', label: '职业', icon: '⚔️' },
+            { key: 'appearance', label: '外貌', icon: '👁️' },
+            { key: 'personality', label: '性格', icon: '🎭' }
+        ];
+
+        const characterInfoHTML = basicInfoItems
+            .filter(item => character[item.key])
+            .map(item => `
+                <div class="info-item">
+                    <span class="info-icon">${item.icon}</span>
+                    <span class="info-label">${item.label}:</span>
+                    <span class="info-value">${character[item.key]}</span>
+                </div>
+            `).join('');
+
+        const finalCharacterInfoHTML = characterInfoHTML || '<div class="no-info">📝 基本信息未设定</div>';
 
         const detailsHTML = `
             <div class="character-details">
-                <h2>${character.name} 的详细信息</h2>
+                <h2>👤 ${character.name} 的详细信息</h2>
                 
                 <div class="character-image-section">
                     ${character.fullBodyImageUrl ? 
                         `<img src="${character.fullBodyImageUrl}" alt="角色全身图" class="character-full-image">` :
-                        '<div class="no-image">角色全身图生成中...</div>'
+                        '<div class="no-image">🎨 角色全身图生成中...</div>'
                     }
                 </div>
 
                 <div class="details-section">
-                    <h3>基本信息</h3>
+                    <h3>📋 基本信息</h3>
                     <div class="character-info">
-                        <p><strong>性别:</strong> ${character.gender || '未设定'}</p>
-                        <p><strong>年龄:</strong> ${character.age || '未设定'}</p>
-                        <p><strong>种族:</strong> ${character.race || '未设定'}</p>
-                        <p><strong>职业:</strong> ${character.profession || '未设定'}</p>
-                        <p><strong>外貌:</strong> ${character.appearance || '未设定'}</p>
-                        <p><strong>性格:</strong> ${character.personality || '未设定'}</p>
+                        ${finalCharacterInfoHTML}
                     </div>
                 </div>
 
                 <div class="details-section">
-                    <h3>当前装备</h3>
+                    <h3>⚔️ 当前装备</h3>
                     <div class="equipment-list">
                         ${equipmentHTML}
                     </div>
                 </div>
 
                 <div class="details-section">
-                    <h3>背包物品 (${character.inventory.length}/${character.maxInventorySize})</h3>
+                    <h3>🎁 背包物品 (${character.inventory ? character.inventory.length : 0}/${character.maxInventorySize || 50})</h3>
                     <div class="inventory-list">
                         ${inventoryHTML}
                     </div>
@@ -596,7 +660,7 @@ class GameApp {
     }
 
     // 显示环境信息（使用缓存机制）
-    async showEnvironmentInfo() {
+    async showEnvironmentInfo(forceRefresh = false) {
         if (!llmService.apiKey) {
             this.showError('请先在设置中配置API密钥');
             return;
@@ -617,7 +681,12 @@ class GameApp {
             // 尝试获取缓存的环境信息
             const cachedScene = await gameDB.getSceneCache(sceneId);
             
-            if (cachedScene) {
+            // 检查是否需要强制刷新或缓存版本过旧
+            const cacheVersion = 'v2.0'; // 提示词优化版本
+            const shouldUseCache = !forceRefresh && cachedScene && 
+                                   cachedScene.environmentData.version === cacheVersion;
+            
+            if (shouldUseCache) {
                 // 使用缓存的环境信息
                 let cachedHTML = cachedScene.environmentData.description || '环境信息获取完成';
                 
@@ -638,13 +707,20 @@ class GameApp {
                 return;
             }
 
-            // 没有缓存，生成新的环境信息
-            this.showLoading('正在查看环境信息...');
+            // 如果是强制刷新，先清除当前场景缓存
+            if (forceRefresh) {
+                await gameDB.clearSceneCache(sceneId);
+                console.log('🗑️ 已清除场景缓存，强制重新生成环境信息');
+            }
+
+            // 没有缓存或强制刷新，生成新的环境信息
+            this.showLoading(forceRefresh ? '正在重新生成环境信息...' : '正在查看环境信息...');
 
             const gameContext = {
                 playerCharacter: this.gameState.playerCharacter,
                 worldState: await gameDB.getAllWorldState(),
-                otherCharacters: await gameDB.getAllCharacters()
+                otherCharacters: await gameDB.getAllCharacters(),
+                gameHistory: await gameDB.getGameLog(10) // 获取最近10条游戏记录
             };
 
             const llmResponse = await llmService.handleSpecialCommand('env', gameContext);
@@ -675,7 +751,8 @@ class GameApp {
                 description: environmentHTML,
                 textDescription: llmResponse.plot,
                 imageUrl: sceneImageUrl,
-                generatedAt: new Date().toISOString()
+                generatedAt: new Date().toISOString(),
+                version: 'v2.0' // 添加版本信息，用于缓存失效检查
             };
             
             await gameDB.saveSceneCache(sceneId, environmentData);
@@ -789,6 +866,11 @@ class GameApp {
                 console.log('   详细变化:', processedChanges);
                 console.log('   原始numericChanges:', llmResponse.numericChanges);
                 
+                // 检查是否需要升级（如果经验值发生变化）
+                if (updates.experience !== undefined) {
+                    await this.checkLevelUp();
+                }
+                
                 // 显示数值变化提示
                 this.showNumericChanges(processedChanges);
             }
@@ -853,6 +935,119 @@ class GameApp {
         }
     }
 
+    // 检查升级
+    async checkLevelUp() {
+        const character = this.gameState.playerCharacter;
+        const currentLevel = character.level || 1;
+        const currentExp = character.experience || 0;
+        
+        // 计算升级所需经验值（等级^2 * 100 + 等级 * 50）
+        const getExpRequirement = (level) => level * level * 100 + level * 50;
+        
+        let newLevel = currentLevel;
+        
+        // 检查是否可以升级
+        while (currentExp >= getExpRequirement(newLevel)) {
+            newLevel++;
+        }
+        
+        // 如果等级有变化，执行升级
+        if (newLevel > currentLevel) {
+            const levelGain = newLevel - currentLevel;
+            
+            // 升级奖励
+            const hpGain = levelGain * 20; // 每级增加20生命值
+            const mpGain = levelGain * 10; // 每级增加10魔法值
+            const staminaGain = levelGain * 15; // 每级增加15体力
+            const statGain = levelGain * 2; // 每级增加2点属性
+            
+            // 更新角色数据
+            const updates = {
+                level: newLevel,
+                maxHp: character.maxHp + hpGain,
+                hp: character.hp + hpGain, // 升级时回复生命值
+                maxMp: character.maxMp + mpGain,
+                mp: character.mp + mpGain, // 升级时回复魔法值
+                maxStamina: character.maxStamina + staminaGain,
+                stamina: character.stamina + staminaGain, // 升级时回复体力
+                attack: character.attack + statGain,
+                defense: character.defense + statGain,
+                magicAttack: character.magicAttack + Math.floor(statGain * 0.8),
+                magicDefense: character.magicDefense + Math.floor(statGain * 0.8)
+            };
+            
+            // 保存到数据库
+            await gameDB.updateCharacterStats(character.id, updates);
+            Object.assign(character, updates);
+            
+            // 显示升级消息
+            const levelUpMessage = `🎉 恭喜升级！等级提升至 ${newLevel} 级！`;
+            this.addNarrativeEntry(levelUpMessage, 'success');
+            
+            // 创建升级变化数据并显示在状态变化UI中
+            const levelUpChanges = {
+                level: {
+                    from: currentLevel,
+                    to: newLevel,
+                    change: levelGain,
+                    originalValue: "升级奖励"
+                },
+                maxHp: {
+                    from: character.maxHp - hpGain,
+                    to: character.maxHp,
+                    change: hpGain,
+                    originalValue: "升级奖励"
+                },
+                hp: {
+                    from: character.hp - hpGain,
+                    to: character.hp,
+                    change: hpGain,
+                    originalValue: "升级回复"
+                },
+                maxMp: {
+                    from: character.maxMp - mpGain,
+                    to: character.maxMp,
+                    change: mpGain,
+                    originalValue: "升级奖励"
+                },
+                mp: {
+                    from: character.mp - mpGain,
+                    to: character.mp,
+                    change: mpGain,
+                    originalValue: "升级回复"
+                },
+                maxStamina: {
+                    from: character.maxStamina - staminaGain,
+                    to: character.maxStamina,
+                    change: staminaGain,
+                    originalValue: "升级奖励"
+                },
+                stamina: {
+                    from: character.stamina - staminaGain,
+                    to: character.stamina,
+                    change: staminaGain,
+                    originalValue: "升级回复"
+                },
+                attack: {
+                    from: character.attack - statGain,
+                    to: character.attack,
+                    change: statGain,
+                    originalValue: "升级奖励"
+                },
+                defense: {
+                    from: character.defense - statGain,
+                    to: character.defense,
+                    change: statGain,
+                    originalValue: "升级奖励"
+                }
+            };
+            
+            this.showNumericChanges(levelUpChanges);
+            
+            console.log(`🎉 角色升级: ${currentLevel} → ${newLevel}`, updates);
+        }
+    }
+
     // 显示数值变化详情
     showNumericChanges(processedChanges) {
         if (Object.keys(processedChanges).length === 0) return;
@@ -872,21 +1067,94 @@ class GameApp {
             hunger: '饥饿度',
             thirst: '口渴度',
             fatigue: '疲劳度',
-            morale: '士气'
+            morale: '士气',
+            level: '等级',
+            maxHp: '生命上限',
+            maxMp: '魔法上限',
+            maxStamina: '体力上限'
         };
         
-        const changes = Object.entries(processedChanges).map(([key, data]) => {
+        // 过滤掉变化为0的项目（无效变化）
+        const validChanges = Object.entries(processedChanges).filter(([key, data]) => {
+            return data.change !== 0 && fieldNames[key]; // 只显示有实际变化且有中文名的字段
+        });
+        
+        if (validChanges.length === 0) return;
+        
+        // 更新状态变化UI
+        this.updateStatusChangesUI(validChanges, fieldNames);
+        
+        // 同时在叙事日志中显示简化版本
+        const changes = validChanges.map(([key, data]) => {
             const fieldName = fieldNames[key] || key;
             const changePrefix = data.change > 0 ? '+' : '';
+            return `${fieldName} ${changePrefix}${data.change}`;
+        }).join(', ');
+        
+        this.addNarrativeEntry(`📊 ${changes}`, 'system');
+    }
+    
+    // 更新状态变化UI
+    updateStatusChangesUI(validChanges, fieldNames) {
+        const statusChangesContent = document.getElementById('status-changes-content');
+        
+        // 清空之前的内容
+        statusChangesContent.innerHTML = '';
+        
+        // 创建变化项目
+        validChanges.forEach(([key, data]) => {
+            const fieldName = fieldNames[key] || key;
+            const changeItem = document.createElement('div');
+            
+            // 确定变化类型（正面、负面、中性）
+            let changeType = 'neutral';
+            if (['hp', 'mp', 'stamina', 'money', 'experience', 'attack', 'defense', 
+                 'magicAttack', 'magicDefense', 'dexterity', 'luck', 'morale', 
+                 'level', 'maxHp', 'maxMp', 'maxStamina'].includes(key)) {
+                changeType = data.change > 0 ? 'positive' : 'negative';
+            } else if (['hunger', 'thirst', 'fatigue'].includes(key)) {
+                // 饥饿、口渴、疲劳度增加是负面的
+                changeType = data.change > 0 ? 'negative' : 'positive';
+            }
+            
+            changeItem.className = `change-item ${changeType}`;
+            
+            // 提取描述（如果有）
             const description = typeof data.originalValue === 'string' && data.originalValue.includes('(') 
-                ? ` (${data.originalValue.split('(')[1].replace(')', '')})` 
+                ? data.originalValue.split('(')[1].replace(')', '')
                 : '';
             
-            return `${fieldName}: ${data.from} → ${data.to} (${changePrefix}${data.change})${description}`;
-        }).join('\n');
+            changeItem.innerHTML = `
+                <div class="change-info">
+                    <span class="change-label">${fieldName}</span>
+                    ${description ? `<div class="change-description">${description}</div>` : ''}
+                </div>
+                <div class="change-values">
+                    <span class="change-value">
+                        ${data.from}<span class="change-arrow">→</span>${data.to}
+                        <span style="color: ${changeType === 'positive' ? '#6bcf7f' : changeType === 'negative' ? '#ff6b6b' : '#4ecdc4'};">
+                            (${data.change > 0 ? '+' : ''}${data.change})
+                        </span>
+                    </span>
+                </div>
+            `;
+            
+            statusChangesContent.appendChild(changeItem);
+        });
         
-        this.addNarrativeEntry(`📊 数值变化:\n${changes}`, 'system');
-    }
+                 // 自动滚动到最新的变化
+         setTimeout(() => {
+             statusChangesContent.scrollTop = statusChangesContent.scrollHeight;
+         }, 100);
+     }
+     
+     // 清空状态变化显示
+     clearStatusChanges() {
+         const statusChangesContent = document.getElementById('status-changes-content');
+         if (statusChangesContent) {
+             statusChangesContent.innerHTML = '<div class="no-changes">暂无状态变化</div>';
+         }
+     }
 
     // 显示游戏响应
     displayGameResponse(response) {
@@ -1412,6 +1680,9 @@ class GameApp {
             this.ui.portraitLoading.classList.add('hidden');
             this.ui.portraitPlaceholder.classList.remove('hidden');
             this.ui.portraitPlaceholder.innerHTML = '<p>暂无角色头像</p>';
+            
+            // 清空状态变化显示
+            this.clearStatusChanges();
             
             // 清空全身图数据（在内存中）
             if (this.gameState.playerCharacter) {

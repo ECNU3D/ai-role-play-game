@@ -24,14 +24,15 @@ class LLMService {
     "plot": "剧情发展",
     "dialogue": "NPC对话",
     "characterStatus": "角色状态",
-    "numericChanges": {"字段": 数值变化},
+    "numericChanges": {"字段": "数值变化"},
     "suggestedActions": ["行动1", "行动2", "行动3"],
     "imagePrompt": "场景描述",
     "gameState": {}
 }
 
 ## 重要
-- numericChanges必须是对象格式，如{"hp": -10}
+- numericChanges中的数值变化必须用字符串格式，如{"hp": "-10", "mp": "+5"}
+- 支持正负数："+5"表示增加，"-10"表示减少，"0"表示无变化
 - 只能修改已存在的数值字段
 - 快速推进剧情，避免冗长描述`;
     }
@@ -251,12 +252,30 @@ class LLMService {
         // 添加玩家输入
         prompt += `\n\n## 玩家行动\n${playerInput}`;
         
+        // 添加当前角色数值状态信息
+        if (gameContext.playerCharacter) {
+            prompt += `\n\n## 当前角色数值状态\n`;
+            const numericFields = ['hp', 'maxHp', 'mp', 'maxMp', 'stamina', 'maxStamina', 'experience', 'level', 'strength', 'agility', 'constitution', 'intelligence', 'wisdom', 'charisma', 'hunger', 'thirst', 'fatigue', 'morale'];
+            
+            numericFields.forEach(field => {
+                if (gameContext.playerCharacter[field] !== undefined) {
+                    prompt += `- ${field}: ${gameContext.playerCharacter[field]}\n`;
+                }
+            });
+            
+            prompt += `\n**重要：numericChanges格式要求**\n`;
+            prompt += `- 必须使用字符串格式表示数值变化\n`;
+            prompt += `- 正确格式示例：{"hp": "-10", "mp": "+5", "stamina": "-2"}\n`;
+            prompt += `- 错误格式：{"hp": -10, "mp": 5}（不能用数字）\n`;
+            prompt += `- 支持："+5"表示增加，"-10"表示减少，"0"表示无变化\n`;
+        }
+
         // 添加最终指令
         prompt += `\n\n## 处理指令\n`;
         prompt += `请根据以上信息，作为专业的RPG游戏管理员，处理玩家的行动。\n`;
         prompt += `严格按照JSON格式返回响应，特别注意：\n`;
-        prompt += `1. numericChanges必须是对象格式，如：{"hp": -10, "mp": -5}\n`;
-        prompt += `2. 只能修改角色中存在的数值字段，不能创建新字段\n`;
+        prompt += `1. numericChanges中的数值变化必须用字符串格式，如：{"hp": "-10", "mp": "+5"}\n`;
+        prompt += `2. 只能修改上述列出的数值字段，不能创建新字段\n`;
         prompt += `3. 建议行动必须符合游戏逻辑和角色状态，不能让角色做不可能的事\n`;
         prompt += `4. 时间地点要精确具体，包含年月日时分和详细地理位置\n`;
         prompt += `5. 环境和情节描述要生动详细，增强沉浸感\n`;
@@ -559,6 +578,12 @@ class LLMService {
 
     // 处理特殊命令
     async handleSpecialCommand(command, gameContext) {
+        // 对于env命令，使用完整的游戏上下文
+        if (command === 'env') {
+            return await this.handleEnvironmentCommand(gameContext);
+        }
+        
+        // 对于其他命令，使用简化处理
         let commandDescription = '';
         
         switch (command) {
@@ -567,9 +592,6 @@ class LLMService {
                 break;
             case 'chars':
                 commandDescription = '显示所有角色信息';
-                break;
-            case 'env':
-                commandDescription = '显示环境详情（时间、地点、天气等）';
                 break;
             default:
                 commandDescription = `处理命令：${command}`;
@@ -587,6 +609,108 @@ class LLMService {
         
         const response = await this.callAPI(prompt);
         return this.parseResponse(response);
+    }
+
+    // 专门处理环境命令，使用完整游戏上下文
+    async handleEnvironmentCommand(gameContext) {
+        // 构建包含完整游戏进度的提示词
+        const prompt = await this.buildEnvironmentPrompt(gameContext);
+        
+        console.log('📤 发送环境查看提示词到LLM (前500字符):', prompt.substring(0, 500) + '...');
+        console.log('📊 环境提示词总长度:', prompt.length);
+        
+        const response = await this.callAPI(prompt);
+        return this.parseResponse(response);
+    }
+
+    // 构建环境查看专用提示词
+    async buildEnvironmentPrompt(gameContext) {
+        let prompt = this.systemPrompt + '\n\n';
+        
+        // 添加简化的角色信息（只包含基本信息，不包含装备和背包）
+        if (gameContext.playerCharacter) {
+            const character = gameContext.playerCharacter;
+            prompt += `## 当前角色基本信息\n`;
+            prompt += `- 角色名: ${character.name}\n`;
+            prompt += `- 等级: ${character.level || 1}\n`;
+            prompt += `- 职业: ${character.profession || '未知'}\n`;
+            prompt += `- 种族: ${character.race || '未知'}\n`;
+            prompt += `- 生命值: ${character.hp}/${character.maxHp}\n`;
+            prompt += `- 魔法值: ${character.mp}/${character.maxMp}\n`;
+            prompt += `- 体力: ${character.stamina}/${character.maxStamina}\n`;
+            if (character.currentLocation) {
+                prompt += `- 当前位置: ${character.currentLocation}\n`;
+            }
+            prompt += '\n';
+        }
+        
+        // 添加世界状态（过滤掉图片信息）
+        if (gameContext.worldState && Object.keys(gameContext.worldState).length > 0) {
+            prompt += `## 世界状态\n`;
+            Object.entries(gameContext.worldState).forEach(([key, value]) => {
+                // 过滤掉图片相关字段
+                if (!key.toLowerCase().includes('url') && 
+                    !key.toLowerCase().includes('image') && 
+                    !key.toLowerCase().includes('picture') &&
+                    !key.toLowerCase().includes('photo')) {
+                    prompt += `- ${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}\n`;
+                }
+            });
+            prompt += '\n';
+        }
+        
+        // 添加其他角色信息（简化版）
+        if (gameContext.otherCharacters && gameContext.otherCharacters.length > 0) {
+            prompt += `## 其他角色\n`;
+            gameContext.otherCharacters.forEach(character => {
+                prompt += `- ${character.name}: ${character.profession || '未知职业'}\n`;
+            });
+            prompt += '\n';
+        }
+        
+        // 添加最近游戏历史（只显示重要事件）
+        if (gameContext.gameHistory && gameContext.gameHistory.length > 0) {
+            prompt += `## 最近游戏历史\n`;
+            gameContext.gameHistory.slice(-3).forEach((entry, index) => {
+                if (entry.playerInput) {
+                    prompt += `${index + 1}. 玩家行动: ${entry.playerInput}\n`;
+                }
+            });
+            prompt += '\n';
+        }
+        
+        // 玩家请求环境信息
+        prompt += `## 玩家指令
+玩家想要查看当前环境的详细信息。
+
+## 任务要求
+基于当前游戏状态和角色位置，生成：
+1. 详细的环境描述（考虑时间、天气、地理位置、周围事物等）
+2. 符合当前游戏进度的场景描述
+3. 与角色状态和历史相符的环境细节
+4. 适合用于生成场景图像的描述
+
+请严格按照JSON格式返回：
+{
+    "currentCharacter": "${gameContext.playerCharacter?.name || '角色'}",
+    "timeLocation": "详细的时间地点信息",
+    "environment": "环境基本描述",
+    "plot": "详细的环境描述，包含感官细节和氛围",
+    "dialogue": "如有NPC或环境中的声音",
+    "characterStatus": "角色在此环境中的状态",
+    "numericChanges": {},
+         "suggestedActions": ["环境相关的行动建议1", "环境相关的行动建议2", "刷新环境"],
+    "imagePrompt": "用于生成当前场景图像的详细英文描述",
+    "gameState": {}
+}
+
+注意：
+- 环境描述必须与角色当前状态和游戏进度保持一致
+- 考虑角色的HP、体力、装备等对环境感知的影响
+- 时间地点要具体明确
+- 图像提示词要详细描述场景的视觉元素`;
+
+        return prompt;
     }
 
     // 验证响应格式
@@ -641,6 +765,43 @@ class LLMService {
         // 确保 numericChanges 是对象
         if (!response.numericChanges || typeof response.numericChanges !== 'object') {
             response.numericChanges = {};
+        }
+        
+        // 处理字符串格式的数值变化
+        if (response.numericChanges && typeof response.numericChanges === 'object') {
+            const processedChanges = {};
+            const validFields = ['hp', 'maxHp', 'mp', 'maxMp', 'stamina', 'maxStamina', 'experience', 'level', 'strength', 'agility', 'constitution', 'intelligence', 'wisdom', 'charisma', 'hunger', 'thirst', 'fatigue', 'morale'];
+            
+            for (const [field, value] of Object.entries(response.numericChanges)) {
+                // 检查字段是否有效
+                if (!validFields.includes(field)) {
+                    console.warn(`忽略无效的数值字段: ${field}`);
+                    continue;
+                }
+                
+                // 处理字符串格式的数值
+                if (typeof value === 'string') {
+                    // 移除空格和其他非数字字符（保留正负号）
+                    const cleanValue = value.replace(/[^\d\-\+\.]/g, '');
+                    
+                    // 尝试转换为数字
+                    const numValue = parseFloat(cleanValue);
+                    
+                    if (!isNaN(numValue)) {
+                        processedChanges[field] = numValue;
+                        console.log(`转换数值变化 ${field}: "${value}" -> ${numValue}`);
+                    } else {
+                        console.warn(`无法转换数值变化 ${field}: "${value}"`);
+                    }
+                } else if (typeof value === 'number') {
+                    // 直接使用数字值
+                    processedChanges[field] = value;
+                } else {
+                    console.warn(`跳过无效的数值变化 ${field}: ${value} (类型: ${typeof value})`);
+                }
+            }
+            
+            response.numericChanges = processedChanges;
         }
         
         // 确保 suggestedActions 是数组
