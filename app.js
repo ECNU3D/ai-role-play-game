@@ -619,7 +619,22 @@ class GameApp {
             
             if (cachedScene) {
                 // 使用缓存的环境信息
-                this.showModal(cachedScene.environmentData.description || '环境信息获取完成');
+                let cachedHTML = cachedScene.environmentData.description || '环境信息获取完成';
+                
+                // 如果缓存中有图像URL但HTML中没有，则重新构建HTML
+                if (cachedScene.environmentData.imageUrl && !cachedHTML.includes('<img')) {
+                    cachedHTML = `
+                        <div class="environment-info">
+                            <h2>当前环境</h2>
+                            <img src="${cachedScene.environmentData.imageUrl}" alt="场景图像" class="scene-image">
+                            <div class="environment-description">
+                                ${cachedScene.environmentData.textDescription || '环境信息获取完成'}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                this.showModal(cachedHTML);
                 return;
             }
 
@@ -638,7 +653,7 @@ class GameApp {
             let sceneImageUrl = null;
             if (llmResponse.plot) {
                 try {
-                    sceneImageUrl = await this.generateSceneImage(llmResponse.plot);
+                    sceneImageUrl = await this.generateEnvironmentImage(llmResponse.plot);
                 } catch (imageError) {
                     console.warn('场景图像生成失败:', imageError);
                 }
@@ -977,6 +992,22 @@ class GameApp {
             // 显示占位图像
             this.ui.sceneImage.src = imageService.createPlaceholderImage('图像生成失败');
             this.ui.sceneImage.classList.remove('hidden');
+        }
+    }
+
+    // 生成环境图像（专门为环境模态框使用）
+    async generateEnvironmentImage(prompt) {
+        if (!imageService.apiKey) {
+            console.log('环境图像生成跳过：未设置API密钥');
+            return null;
+        }
+
+        try {
+            const result = await imageService.generateImageWithCache(prompt);
+            return result.imageUrl;
+        } catch (error) {
+            console.error('环境图像生成失败:', error);
+            return null;
         }
     }
 

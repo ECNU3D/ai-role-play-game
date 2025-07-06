@@ -506,7 +506,7 @@ body {
 }
 
 /* 环境信息专用样式 */
-.scene-image {
+.environment-info .scene-image {
     width: 100%;
     max-height: 400px;
     object-fit: cover;
@@ -514,6 +514,19 @@ body {
     border: 3px solid #ffd700;
     box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
     margin-bottom: 15px;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* 主界面场景图像 */
+.scene-image-container .scene-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 3px solid #ffd700;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
 }
 
 .environment-description {
@@ -523,6 +536,11 @@ body {
     border-left: 4px solid #ffd700;
     line-height: 1.6;
     font-size: 16px;
+    word-wrap: break-word;
+    word-break: break-word;
+    hyphens: auto;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
 }
 
 .status-section, .details-section {
@@ -867,6 +885,12 @@ body {
         max-height: 92vh;
     }
 
+    /* 环境图像移动端优化 */
+    .environment-info .scene-image {
+        max-height: 250px;
+        margin-bottom: 10px;
+    }
+
     .character-details {
         max-height: 88vh;
         font-size: 14px;
@@ -979,6 +1003,12 @@ body {
     .character-full-image {
         max-width: 150px;
         max-height: 180px;
+    }
+
+    /* 环境图像极小屏幕优化 */
+    .environment-info .scene-image {
+        max-height: 180px;
+        margin-bottom: 8px;
     }
 
     .details-section {
